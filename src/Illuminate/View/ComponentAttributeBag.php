@@ -483,7 +483,7 @@ class ComponentAttributeBag implements ArrayAccess, Htmlable, IteratorAggregate
 
     public function for(string $prefix): static
     {
-        $attributes = $this->whereStartsWith($prefix . '::');
+        $attributes = $this->whereStartsWith($prefix . static::$prefixDelimiter);
 
         $newAttributes = [];
         foreach ($attributes as $key => $value) {
