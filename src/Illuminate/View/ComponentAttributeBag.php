@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
 use IteratorAggregate;
+use TailwindMerge\Contracts\TailwindMergeContract;
 use Traversable;
 
 class ComponentAttributeBag implements ArrayAccess, Htmlable, IteratorAggregate
@@ -23,6 +24,13 @@ class ComponentAttributeBag implements ArrayAccess, Htmlable, IteratorAggregate
      * @var array
      */
     protected $attributes = [];
+
+    protected static $classMergeCallback;
+
+    public static function handleClassMerge(?callable $callback)
+    {
+        static::$classMergeCallback = $callback;
+    }
 
     /**
      * Create a new component attribute bag instance.
@@ -276,28 +284,34 @@ class ComponentAttributeBag implements ArrayAccess, Htmlable, IteratorAggregate
     {
         $attributeDefaults = array_map(function ($value) use ($escape) {
             return $this->shouldEscapeAttributeValue($escape, $value)
-                        ? e($value)
-                        : $value;
+                ? e($value)
+                : $value;
         }, $attributeDefaults);
 
         [$appendableAttributes, $nonAppendableAttributes] = collect($this->attributes)
-                    ->partition(function ($value, $key) use ($attributeDefaults) {
-                        return $key === 'class' || $key === 'style' || (
-                            isset($attributeDefaults[$key]) &&
-                            $attributeDefaults[$key] instanceof AppendableAttributeValue
-                        );
-                    });
+            ->partition(function ($value, $key) use ($attributeDefaults) {
+                return $key === 'class' || $key === 'style' || (
+                        isset($attributeDefaults[$key]) &&
+                        $attributeDefaults[$key] instanceof AppendableAttributeValue
+                    );
+            });
 
         $attributes = $appendableAttributes->mapWithKeys(function ($value, $key) use ($attributeDefaults, $escape) {
             $defaultsValue = isset($attributeDefaults[$key]) && $attributeDefaults[$key] instanceof AppendableAttributeValue
-                        ? $this->resolveAppendableAttributeDefault($attributeDefaults, $key, $escape)
-                        : ($attributeDefaults[$key] ?? '');
+                ? $this->resolveAppendableAttributeDefault($attributeDefaults, $key, $escape)
+                : ($attributeDefaults[$key] ?? '');
 
             if ($key === 'style') {
                 $value = Str::finish($value, ';');
             }
 
-            return [$key => implode(' ', array_unique(array_filter([$defaultsValue, $value])))];
+            $mergedValue = implode(' ', array_unique(array_filter([$defaultsValue, $value])));
+
+            if ($key === 'class' && isset(static::$classMergeCallback)) {
+                $mergedValue = call_user_func(static::$classMergeCallback,$mergedValue);
+            }
+
+            return [$key => $mergedValue];
         })->merge($nonAppendableAttributes)->all();
 
         return new static(array_merge($attributeDefaults, $attributes));
@@ -317,8 +331,8 @@ class ComponentAttributeBag implements ArrayAccess, Htmlable, IteratorAggregate
         }
 
         return ! is_object($value) &&
-               ! is_null($value) &&
-               ! is_bool($value);
+            ! is_null($value) &&
+            ! is_bool($value);
     }
 
     /**
@@ -455,6 +469,18 @@ class ComponentAttributeBag implements ArrayAccess, Htmlable, IteratorAggregate
         return new ArrayIterator($this->attributes);
     }
 
+    public function for(string $prefix): static
+    {
+        $attributes = $this->whereStartsWith($prefix . '::');
+
+        $newAttributes = [];
+        foreach ($attributes as $key => $value) {
+            $newAttributes[substr($key, strlen($prefix) + 2)] = $value;
+        }
+
+        return new static($newAttributes);
+    }
+
     /**
      * Implode the attributes into a single HTML ready string.
      *
@@ -465,6 +491,10 @@ class ComponentAttributeBag implements ArrayAccess, Htmlable, IteratorAggregate
         $string = '';
 
         foreach ($this->attributes as $key => $value) {
+            if(Str::contains($key, '::')){
+                continue;
+            }
+
             if ($value === false || is_null($value)) {
                 continue;
             }
