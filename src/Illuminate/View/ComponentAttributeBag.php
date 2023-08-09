@@ -27,9 +27,21 @@ class ComponentAttributeBag implements ArrayAccess, Htmlable, IteratorAggregate
 
     protected static $classMergeCallback;
 
+    protected static $prefixDelimiter = '::';
+
     public static function handleClassMerge(?callable $callback)
     {
         static::$classMergeCallback = $callback;
+    }
+
+    public static function setPrefixDelimiter(string $delimiter)
+    {
+        static::$prefixDelimiter = $delimiter;
+    }
+
+    public static function disablePrefixHandling()
+    {
+        static::setPrefixDelimiter('');
     }
 
     /**
@@ -491,7 +503,7 @@ class ComponentAttributeBag implements ArrayAccess, Htmlable, IteratorAggregate
         $string = '';
 
         foreach ($this->attributes as $key => $value) {
-            if(Str::contains($key, '::')){
+            if(static::$prefixDelimiter && Str::contains($key, static::$prefixDelimiter)){
                 continue;
             }
 

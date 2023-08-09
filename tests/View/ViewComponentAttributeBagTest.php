@@ -101,6 +101,34 @@ class ViewComponentAttributeBagTest extends TestCase
             'test-extract-1',
             'test-extract-2' => 'defaultValue',
         ]));
+
+        $bag = (new ComponentAttributeBag)
+            ->merge([
+                'test' => 'no-prefix',
+                'body::test' => 'with prefix',
+            ]);
+
+        $this->assertSame('test="no-prefix"', (string) $bag);
+
+        ComponentAttributeBag::setPrefixDelimiter('__');
+        $bag = (new ComponentAttributeBag)
+            ->merge([
+                'test' => 'no-prefix',
+                'body::test' => 'with default prefix',
+                'body__test' => 'with custom prefix',
+            ]);
+
+        $this->assertSame('test="no-prefix" body::test="with default prefix"', (string) $bag);
+
+        ComponentAttributeBag::disablePrefixHandling();
+        $bag = (new ComponentAttributeBag)
+            ->merge([
+                'test' => 'no-prefix',
+                'body::test' => 'with default prefix',
+                'body__test' => 'with custom prefix',
+            ]);
+
+        $this->assertSame('test="no-prefix" body::test="with default prefix" body__test="with custom prefix"', (string) $bag);
     }
 
     public function testItMakesAnExceptionForAlpineXdata()
